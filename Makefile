@@ -1,7 +1,9 @@
-EXECUTABLE=main prod_con ref open_mp
+EXECUTABLE=main prod_con ref open_mp mat
 
-all: main.cc
+all:
+	clear
 	g++ -std=c++11 -pthread -o main main.cc
+	./main
 
 clean: 
 	rm -f $(EXECUTABLE)
