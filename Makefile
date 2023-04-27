@@ -17,5 +17,10 @@ prod:
 mp:
 	clear
 	clang++ -Xpreprocessor -fopenmp -L/usr/local/opt/llvm/lib -lomp open_mp.cpp -o open_mp
-	./open_mp
+	./open_mp | tee results.txt
+
+mm:
+	clear
+	g++ -std=c++11 -pthread -o mat mat.cpp
+	./mat
 
