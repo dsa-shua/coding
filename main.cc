@@ -1,24 +1,20 @@
-#include <thread>
-#include <iostream>
+#include "matrix.h"
 
-
-int global_data = 0;
-int num_threads = 8;
-
-void worker(int tid){
-  std::cout << "TID: " << tid << std::endl;
+void test1(void){
+  dataSheet();
+  printMatrix(A);
+  printMatrix(B);
+  printMatrix(reference);
+  serial_matmul();
+  printMatrix(C);
+  sanity();
+  serial_transpose();
+  printMatrix(C);
 }
 
 int main(void){
-  std::vector<std::thread> threads;
-  
-  for(int tid = 0; tid < num_threads; tid++){
-    threads.push_back(std::thread(worker,tid));
-  }
-  
-  for(auto& thread: threads){
-    thread.join();
-  }
-  
+  dataSheet();
+  parallel_row();
+  sanity();
   return 0;
 }

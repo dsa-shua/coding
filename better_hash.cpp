@@ -91,7 +91,6 @@ class better_locked_probing_hash_table : public hash_table {
                 uint64_t index = this->hash(key);
                 int probe_count = 0;
                 int success = 0;
-
                 success = read_(key, value_buffer, index); // first check
                 // check subsequent buckets.
                 while(success == 0 && table[index].valid == true) {
@@ -100,7 +99,6 @@ class better_locked_probing_hash_table : public hash_table {
                         if (probe_count >= TABLE_SIZE) break;
                         success = read_(key, value_buffer, index);
                 }
-
                 if (success)
                         return true;
                 else
@@ -111,7 +109,6 @@ class better_locked_probing_hash_table : public hash_table {
                 uint64_t index = this->hash(key);
                 int probe_count = 0;
                 int success = 0;
-
                 success = insert_(key, value, index);
                 while(success == 0) {
                         probe_count++;
@@ -119,10 +116,8 @@ class better_locked_probing_hash_table : public hash_table {
                         if (probe_count >= TABLE_SIZE) break;
                         success = insert_(key, value, index);
                 }
-
                 if (success) return true;
                 else return false;
-
         }
 
 

@@ -105,13 +105,4 @@ class locked_probing_hash_table : public hash_table {
 
 
 };
-
 #endif
-
-/* What seems to be the problem?
- The problem is from the fact that the access to the entirety hash table
- is blocked by the lockguard whenever there is an access either by
- insert or by write
- 
- 
- */

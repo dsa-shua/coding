@@ -1,4 +1,4 @@
-EXECUTABLE=main prod_con ref open_mp mat
+EXECUTABLE=main prod_con ref open_mp mat raii_scheme waiting
 
 all:
 	clear
@@ -9,8 +9,9 @@ clean:
 	rm -f $(EXECUTABLE)
 
 run:
+	clear
 	g++ -std=c++11 -pthread -o main main.cc
-	./main 1234567890 10
+	./main
 
 prod:
 	g++ -std=c++11 -pthread -o prod_con prod-con.cc
@@ -25,4 +26,13 @@ mm:
 	clear
 	g++ -std=c++11 -pthread -o mat mat.cpp
 	./mat
+	
+raii:
+	clear
+	g++ -std=c++11 -pthread -o raii_scheme raii_scheme.cpp
+	./raii_scheme
 
+wait:
+	clear
+	g++ -std=c++11 -pthread -o waiting waiting.cc
+	./waiting
