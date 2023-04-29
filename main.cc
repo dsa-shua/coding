@@ -20,14 +20,21 @@ void run(void){
   //  sanity_check(ref, mat3);
 }
 
+int r = n;
+int c = m;
+
 int main(void){
-  int r = 8;
-  int c = 8;
-  int* mat = generate_matrix(r,c);
-  int* transposed = generate_0(r,c);
-  printMatrix(mat,r,c);
-  serial_transpose(mat, transposed, r,c);
-  printMatrix(transposed,c,r);
+  srand(time(NULL));
   
+  
+  int* matrix1 = generate_matrix(r,c);
+
+  int* matrix2 = generate_matrix(r,c);
+  
+  int* serial = generate_0(r,c);
+  int* parallel = generate_0(r,c);
+  serial_matmul(matrix1, matrix2, serial, r,c);
+  parallel_transpose(matrix1, matrix2, parallel, r,c);
+  sanity_check(serial,parallel,r,c);
   return 0;
 }

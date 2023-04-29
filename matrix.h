@@ -12,15 +12,16 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <random>
 #include "matrix_data.h"
 
 std::chrono::duration<double> diff;
 std::vector<std::thread> threads;
-const int n = 8;
-const int m = 8;
-const int size = 64;
+const int n = 512 << 1;
+const int m = 512 << 1;
+int size = n*m;
 
-const int num_threads = 4;
+const int num_threads = 8;
 std::mutex global_lock;
 int items_per_thread = size / num_threads;
 int row_per_thread = n / num_threads;
@@ -30,7 +31,6 @@ void clear(void){
   threads.clear();
 }
 void dataSheet(void){
-  // len of longest: 18
   printf("=========================\n");
   printf("n: %18d\n",n);
   printf("m: %18d\n",m);
@@ -42,9 +42,9 @@ void dataSheet(void){
   printf("=========================\n");
 }
 
-void sanity_check(int* ref, int* target){
+void sanity_check(int* ref, int* target, int r, int c){
   int count = 0;
-  for(int i = 0; i < n * m; i++){
+  for(int i = 0; i < r * c; i++){
     if(ref[i] != target[i]){
       if(count < 6){
         std::cout << "Error at [" << i << "] | REF: " << ref[i] << " TARGET: " << target[i] << std::endl;
@@ -93,19 +93,16 @@ void serial_transpose(int* target, int* destination, int r, int c){
 void _transpose(int* target, int* destination, int r, int c, int tid){
   int start_row = tid*row_per_thread;
   int end_row = start_row + row_per_thread;
-  int start = tid*items_per_thread;
-  int end = start + items_per_thread;
   
-  for (int i = start_row; i < end_row;i++)
+  for (int i = start_row; i < end_row; i++)
     for(int j = 0; j < c; j++)
       destination[j*r + i] = target[i*c + j];
-  
 }
 
 void transpose(int* target, int* destination, int r, int c){
   std::chrono::duration<double> diff;
   auto time_start = std::chrono::steady_clock::now();
-  for(int i = 0; i < r; i++)
+  for(int i = 0; i < num_threads; i++)
     threads.push_back(std::thread(_transpose, target, destination, r, c, i));
   
   for(auto& thread: threads)
@@ -115,7 +112,6 @@ void transpose(int* target, int* destination, int r, int c){
   auto time_end = std::chrono::steady_clock::now();
   diff = time_end - time_start;
   std::cout << "Tranpose took: " << diff.count() << " sec" << std::endl;
-  
 }
 
 void col_wise(int tid, int* m1, int* m2, int* m3, int r, int c){
@@ -177,7 +173,7 @@ void parallel_col(int* m1, int* m2, int* m3, int r, int c){
 
 int* generate_matrix(int rows, int cols){
   int* matrix = new int[rows*cols];
-  srand(time(NULL)); // generate random seed
+//  srand(time(NULL)); // generate random seed
   for(int i = 0; i < rows; i++){
     for(int j = 0; j < cols; j++){
       matrix[i * cols + j] = rand() % 6; // generate between 0 and 5
@@ -197,11 +193,30 @@ int* generate_0(int rows, int cols){
   return matrix;
 }
 
-void do_transpose(int* mat1, int* mat2, int* mat3, int r, int c){
-  
+void do_transpose(int* mat1, int* mat2, int* mat3, int r, int c, int tid){
+  int start_row = tid*row_per_thread;
+  int end_row = start_row + row_per_thread;
+  for(int i = start_row; i < end_row; i++)
+    for(int j = 0; j < c; j++)
+      for(int k = 0; k < r; k++)
+        mat3[i*r + j] += mat1[i*r + k] * mat2[j*m + k];
+
 }
 
 void parallel_transpose(int* mat1, int* mat2, int* mat3, int r, int c){
+  std::chrono::duration<double> diff;
+  auto time_start = std::chrono::steady_clock::now();
   int* transposed_b = generate_0(r,c);
-  serial_transpose(transposed_b,mat2,r,c);
+  transpose(mat2,transposed_b,r,c);
+  
+  for (int i = 0; i < num_threads; i++){
+    threads.push_back(std::thread(do_transpose,mat1,transposed_b,mat3,r,c,i));
+  }
+  for(auto& thread: threads){
+    thread.join();
+  }
+  
+  auto time_end = std::chrono::steady_clock::now();
+  diff = time_end - time_start;
+  std::cout << "Tranpose MATMUL Took: " << diff.count() << " sec" << std::endl;
 }
