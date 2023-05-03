@@ -17,15 +17,20 @@
 
 std::chrono::duration<double> diff;
 std::vector<std::thread> threads;
-const int n = 512 << 1;
-const int m = 512 << 1;
+const int n = 512 << 2;
+const int m = 512 << 2;
 int size = n*m;
 
-const int num_threads = 8;
+const int num_threads = 16;
 std::mutex global_lock;
 int items_per_thread = size / num_threads;
 int row_per_thread = n / num_threads;
 int col_per_thread = m / num_threads;
+
+void mat_add(int* mat1, int* mat2, int* mat3, int r, int c){
+  for(int i = 0; i < r*c; i++)
+    mat3[i] = mat1[i] + mat2[i];
+}
 
 void clear(void){
   threads.clear();
@@ -219,4 +224,246 @@ void parallel_transpose(int* mat1, int* mat2, int* mat3, int r, int c){
   auto time_end = std::chrono::steady_clock::now();
   diff = time_end - time_start;
   std::cout << "Tranpose MATMUL Took: " << diff.count() << " sec" << std::endl;
+}
+
+void __b_do(int tid, int* m1, int* m2, int* m3, int r, int c){
+  // redefine due to change in r and c
+  int _row_per_thread = r / num_threads;
+  int _size = r * c;
+  int _items_per_thread = _size / num_threads;
+  int start_row = tid*_row_per_thread;
+  int end_row = start_row + _row_per_thread;
+  int start = tid*_items_per_thread;
+  int end = start + _items_per_thread;
+
+  for(int i = start_row; i < end_row; i++){
+    for(int j = 0; j < c; j++){
+      for(int k = 0; k < r; k++){
+        m3[i*r + j] += m1[i*c + k] * m2[k*r+ j];
+      }
+    }
+  }
+}
+
+void _b_matmul(int* m1, int* m2, int* m3, int r, int c){
+  for(int tid = 0; tid < num_threads; tid++){
+    threads.push_back(std::thread(__b_do, tid, m1,m2,m3,r,c));
+  }
+  for(auto& thread: threads){
+    thread.join();
+  }
+  threads.clear();
+}
+
+
+void blocked_matrix(int* mat1, int* mat2, int* mat3, int r, int c){
+  std::chrono::duration<double> diff;
+  auto start = std::chrono::steady_clock::now();
+  // checking thread count
+  if((num_threads % 4)!= 0){
+    printf("\n\npanic: num thread error\n");
+    printf("num_threads: %d\n", num_threads);
+    while(1) {;}
+  }
+  
+  int threads_per_block = num_threads / 4;
+  int row_midpoint = r / 2;
+  int col_midpoint = c / 2;
+  
+  
+  int* A0 = generate_0(row_midpoint, col_midpoint);
+  int* A1 = generate_0(row_midpoint, col_midpoint);
+  int* A2 = generate_0(row_midpoint, col_midpoint);
+  int* A3 = generate_0(row_midpoint, col_midpoint);
+  
+  /*==============================================*/
+  
+  // TODO: Paralellize making of blocks, utilize all 16 threads
+  // BLOCK A1
+  {
+    int run = 0;
+    for(int i = 0; i < row_midpoint; i++)
+      for(int k = 0; k < col_midpoint; k++){
+        A0[run] = mat1[i*r + k]; run++;
+      }
+  }
+  
+  {
+    // BLOCK A1
+    int run = 0;
+    for(int i = 0; i < row_midpoint; i++)
+      for(int k = col_midpoint; k < c; k++){
+        A1[run] = mat1[i*r + k]; run++;
+      }
+  }
+  
+  {
+    // BLOCK A2
+    int run = 0;
+    for(int i = row_midpoint; i < r; i++)
+      for(int k = 0; k < col_midpoint; k++){
+        A2[run] = mat1[i*r + k]; run++;
+      }
+  }
+
+  {
+    // BLOCK A3
+    int run = 0;
+    for(int i = row_midpoint; i < r;i++)
+      for(int k = col_midpoint; k < c; k++){
+        A3[run] = mat1[i*r + k]; run++;
+      }
+  }
+
+  
+  /*==============================================*/
+  // Adjust Memory Allocation
+  delete[] mat1;
+  int* B0 = generate_0(row_midpoint, col_midpoint);
+  int* B1 = generate_0(row_midpoint, col_midpoint);
+  int* B2 = generate_0(row_midpoint, col_midpoint);
+  int* B3 = generate_0(row_midpoint, col_midpoint);
+
+  
+  //Block B0:
+  {
+    int run = 0;
+    for(int i = 0; i < row_midpoint; i++)
+      for(int k = 0; k < col_midpoint; k++){
+        B0[run] = mat2[i*r + k]; run++;
+      }
+  }
+
+  //Block B1:
+  {
+    int run = 0;
+    for(int i = 0; i < row_midpoint; i++)
+      for(int k = col_midpoint; k < c; k++){
+        B1[run] = mat2[i*r + k]; run++;
+      }
+  }
+  
+  // Block B2
+  {
+    int run = 0;
+    for(int i = row_midpoint; i < r; i++)
+      for(int k = 0; k < col_midpoint; k++){
+        B2[run] = mat2[i*r + k]; run++;
+      }
+  }
+  
+  // BLOCK B3
+  {
+    int run = 0;
+    for(int i = row_midpoint; i < r;i++)
+      for(int k = col_midpoint; k < c; k++){
+        B3[run] = mat2[i*r + k]; run++;
+      }
+  }
+
+  // Adjust Memory
+  delete[] mat2;
+  
+  // Actual Matrix Multiplication
+  int* C0 = generate_0(row_midpoint, col_midpoint);
+  int* C1 = generate_0(row_midpoint, col_midpoint);
+  int* C2 = generate_0(row_midpoint, col_midpoint);
+  int* C3 = generate_0(row_midpoint, col_midpoint);
+  
+  // We serialize the parallelization of each block multiply
+  // (we're already using 16 threads per block multiply)
+  // TODO: need to parallelize matrix addition
+  
+  {
+    int* buffer1 = generate_0(row_midpoint, col_midpoint);
+    int* buffer2 = generate_0(row_midpoint, col_midpoint);
+    
+    _b_matmul(A0,B0,buffer1,row_midpoint,col_midpoint);
+    _b_matmul(A1,B2,buffer2, row_midpoint,col_midpoint);
+    mat_add(buffer1,buffer2, C0,row_midpoint,col_midpoint);
+    
+    delete[] buffer1;
+    delete[] buffer2;
+  }
+  
+  {
+    int* buffer1 = generate_0(row_midpoint, col_midpoint);
+    int* buffer2 = generate_0(row_midpoint, col_midpoint);
+    
+    _b_matmul(A0,B1,buffer1,row_midpoint,col_midpoint);
+    _b_matmul(A1,B3,buffer2, row_midpoint,col_midpoint);
+    mat_add(buffer1,buffer2, C1,row_midpoint,col_midpoint);
+    
+    delete[] buffer1;
+    delete[] buffer2;
+  }
+  
+  // Remove Finished Row on A
+  delete[] A0;
+  delete[] A1;
+  
+  {
+    int* buffer1 = generate_0(row_midpoint, col_midpoint);
+    int* buffer2 = generate_0(row_midpoint, col_midpoint);
+    
+    _b_matmul(A2,B0,buffer1,row_midpoint,col_midpoint);
+    _b_matmul(A3,B2,buffer2, row_midpoint,col_midpoint);
+    mat_add(buffer1,buffer2, C2,row_midpoint,col_midpoint);
+    
+    delete[] buffer1;
+    delete[] buffer2;
+  }
+  
+  {
+    int* buffer1 = generate_0(row_midpoint, col_midpoint);
+    int* buffer2 = generate_0(row_midpoint, col_midpoint);
+    
+    _b_matmul(A2,B1,buffer1,row_midpoint,col_midpoint);
+    _b_matmul(A3,B3,buffer2, row_midpoint,col_midpoint);
+    mat_add(buffer1,buffer2, C3,row_midpoint,col_midpoint);
+    
+    delete[] buffer1;
+    delete[] buffer2;
+  }
+  
+  {
+    // Free Others
+    delete[] A2;
+    delete[] A3;
+    delete[] B0;
+    delete[] B1;
+    delete[] B2;
+    delete[] B3;
+    
+  }
+    
+  
+  // TODO: make use of 16 threads
+  /* PLUG ON ACTUAL RESULT MATRIX */
+  //  C0
+  for(int i = 0; i < row_midpoint; i++)
+    for(int j = 0; j < col_midpoint; j++){
+      mat3[i*r + j] = C0[i*row_midpoint + j];
+    }
+  
+  // C1
+  for(int i = 0; i < row_midpoint; i++)
+    for(int j = 0; j < col_midpoint; j++){
+      mat3[i*r + j+col_midpoint] = C1[i*row_midpoint + j];
+    }
+  
+  // C2
+  for(int i = 0; i < row_midpoint; i++)
+    for(int j = 0; j < col_midpoint; j++){
+      mat3[(i+row_midpoint)*r + j] = C2[i*row_midpoint + j];
+    }
+  
+  // C3
+  for(int i = 0; i < row_midpoint; i++)
+    for(int j = 0; j < col_midpoint; j++){
+      mat3[(i+row_midpoint)*r + (j+col_midpoint)] = C3[i*row_midpoint + j];
+    }
+  auto end = std::chrono::steady_clock::now();
+  diff = end - start;
+  std::cout << "Blocked Serial? took: " << diff.count() << " sec" << std::endl;
 }

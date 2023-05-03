@@ -28,13 +28,19 @@ int main(void){
   
   
   int* matrix1 = generate_matrix(r,c);
-
   int* matrix2 = generate_matrix(r,c);
   
   int* serial = generate_0(r,c);
   int* parallel = generate_0(r,c);
-  serial_matmul(matrix1, matrix2, serial, r,c);
-  parallel_transpose(matrix1, matrix2, parallel, r,c);
+  int* trans = generate_0(r,c);
+  
+  serial_matmul(matrix1, matrix2, serial,r,c); clear();
+  parallel_transpose(matrix1, matrix2, trans,r,c); clear();
+  
+  blocked_matrix(matrix1, matrix2, parallel, r,c); clear();
   sanity_check(serial,parallel,r,c);
+  
+  
+  
   return 0;
 }
